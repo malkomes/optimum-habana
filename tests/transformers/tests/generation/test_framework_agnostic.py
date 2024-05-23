@@ -1,11 +1,15 @@
 """
 Framework agnostic tests for generate()-related methods.
 """
-
+import pytest
 import numpy as np
-from transformers import AutoTokenizer
-from transformers.testing_utils import slow, torch_device
 
+from transformers import AutoTokenizer
+from transformers.testing_utils import slow
+from optimum.habana.transformers.modeling_utils import adapt_transformers_to_gaudi
+
+torch_device = "hpu"
+adapt_transformers_to_gaudi()
 
 class GenerationIntegrationTestsMixin:
     # To be populated by the child classes
@@ -63,7 +67,7 @@ class GenerationIntegrationTestsMixin:
         with self.assertRaises(ValueError):
             bart_model.generate(input_ids, logits_processor=logits_processor)
 
-        bart_model.config.min_length = None
+        bart_model.generation_config.min_length = None
         bart_model.generate(input_ids, logits_processor=logits_processor)
 
     def test_max_new_tokens_encoder_decoder(self):
@@ -156,10 +160,10 @@ class GenerationIntegrationTestsMixin:
         is_pt = not model_cls.__name__.startswith("TF")
 
         articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2", padding_side="left")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = model_cls.from_pretrained("distilgpt2")
+        model = model_cls.from_pretrained("distilbert/distilgpt2")
         input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
         if is_pt:
             model = model.to(torch_device)
@@ -192,10 +196,10 @@ class GenerationIntegrationTestsMixin:
         is_pt = not model_cls.__name__.startswith("TF")
 
         articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2", padding_side="left")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = model_cls.from_pretrained("distilgpt2")
+        model = model_cls.from_pretrained("distilbert/distilgpt2")
         input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
         if is_pt:
             model = model.to(torch_device)
@@ -222,6 +226,7 @@ class GenerationIntegrationTestsMixin:
         )
         self.assertTrue(np.allclose(transition_scores, expected_scores, atol=1e-3))
 
+    @pytest.mark.skip("Beam search is not supported by optimum-habana yet")
     def test_transition_scores_beam_search_encoder_decoder(self):
         model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
         return_tensors = self.framework_dependent_parameters["return_tensors"]
@@ -257,6 +262,7 @@ class GenerationIntegrationTestsMixin:
 
         self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
 
+    @pytest.mark.skip("Beam search is not supported by optimum-habana yet")
     def test_transition_scores_beam_search_encoder_decoder_with_eos(self):
         model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
         return_tensors = self.framework_dependent_parameters["return_tensors"]
@@ -291,6 +297,7 @@ class GenerationIntegrationTestsMixin:
 
         self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
 
+    @pytest.mark.skip("Beam search is not supported by optimum-habana yet")
     def test_transition_scores_beam_search_decoder_only(self):
         model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
         return_tensors = self.framework_dependent_parameters["return_tensors"]
@@ -355,7 +362,10 @@ class GenerationIntegrationTestsMixin:
             model = model.to(torch_device)
             input_ids = input_ids.to(torch_device)
 
-        outputs = model.generate(input_ids=input_ids)
+        with pytest.raises(NotImplementedError) as excinfo:        
+            outputs = model.generate(input_ids=input_ids)
+        assert "Beam search sampling is not supported by optimum-habana yet" in str(excinfo.value)
+        pytest.xfail("Not supported by optimum-habana yet")
 
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         if is_pt:
@@ -374,7 +384,7 @@ class GenerationIntegrationTestsMixin:
         is_pt = not model_cls.__name__.startswith("TF")
 
         input_ids = create_tensor_fn(2 * [[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]])
-        model = model_cls.from_pretrained("t5-small")
+        model = model_cls.from_pretrained("google-t5/t5-small")
         if is_pt:
             model = model.to(torch_device)
             input_ids = input_ids.to(torch_device)
@@ -528,7 +538,7 @@ class GenerationIntegrationTestsMixin:
 
         pixel_values = floats_tensor((2, 3, 30, 30))
         model = model_cls.from_pretrained("hf-internal-testing/tiny-random-VisionEncoderDecoderModel-vit-gpt2")
-        model.config.decoder.eos_token_id = None
+        model.generation_config.eos_token_id = None
         if is_pt:
             pixel_values = pixel_values.to(torch_device)
             model = model.to(torch_device)
@@ -623,6 +633,7 @@ class GenerationIntegrationTestsMixin:
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
+    @pytest.mark.skip("Beam search is not supported by optimum-habana yet")
     def test_eos_token_id_int_and_list_beam_search(self):
         model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
         return_tensors = self.framework_dependent_parameters["return_tensors"]

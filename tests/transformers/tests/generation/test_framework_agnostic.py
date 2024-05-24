@@ -63,7 +63,7 @@ class GenerationIntegrationTestsMixin:
         with self.assertRaises(ValueError):
             bart_model.generate(input_ids, logits_processor=logits_processor)
 
-        bart_model.config.min_length = None
+        bart_model.generation_config.min_length = None
         bart_model.generate(input_ids, logits_processor=logits_processor)
 
     def test_max_new_tokens_encoder_decoder(self):

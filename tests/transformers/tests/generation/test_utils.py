@@ -15,28 +15,37 @@
 
 
 import inspect
+import tempfile
 import unittest
 import warnings
+import pytest
 
 import numpy as np
-import pytest
-from transformers import is_torch_available, pipeline
-from transformers.testing_utils import require_torch, slow
+from parameterized import parameterized
 
-from optimum.habana.transformers.modeling_utils import adapt_transformers_to_gaudi
+from transformers import is_torch_available, pipeline, set_seed
+from transformers.testing_utils import (
+    is_flaky,
+    require_accelerate,
+    require_torch,
+    require_torch_multi_accelerator,
+    slow,
+)
 
-from ..test_modeling_common import floats_tensor, ids_tensor
+from ..test_modeling_common import floats_tensor, ids_tensor, torch_device
 from .test_framework_agnostic import GenerationIntegrationTestsMixin
 
 
 if is_torch_available():
     import torch
+
     from transformers import (
         AutoModelForCausalLM,
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
         AutoTokenizer,
+        BartForCausalLM,
         BartForConditionalGeneration,
         BartTokenizer,
         GPT2LMHeadModel,
@@ -46,6 +55,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         top_k_top_p_filtering,
     )
+    from transformers.cache_utils import DynamicCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -56,6 +66,9 @@ if is_torch_available():
         DisjunctiveConstraint,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
+        GenerateBeamDecoderOnlyOutput,
+        GenerateBeamEncoderDecoderOutput,
+        GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
@@ -76,11 +89,7 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
-    from transformers.generation.candidate_generator import AssistedCandidateGenerator, CandidateGenerator
-    from transformers.generation.streamers import BaseStreamer
-
-torch_device = "hpu"
-adapt_transformers_to_gaudi()
+    from transformers.generation.utils import _speculative_sampling
 
 
 class GenerationTesterMixin:

@@ -184,7 +184,7 @@ class GaudiGenerationMixin(GenerationMixin):
             if isinstance(decoder_start_token_id, list):
                 if len(decoder_start_token_id) != batch_size:
                     raise ValueError(
-                        f"`decoder_start_token_id` expcted to have length {batch_size} but got {len(decoder_start_token_id)}"
+                        f"`decoder_start_token_id` expected to have length {batch_size} but got {len(decoder_start_token_id)}"
                     )
                 decoder_input_ids_start = torch.tensor(decoder_start_token_id, dtype=torch.long, device=device)
                 decoder_input_ids_start = decoder_input_ids_start.view(-1, 1)
@@ -195,9 +195,21 @@ class GaudiGenerationMixin(GenerationMixin):
         else:
             # creating padded decoder_input_ids to achieve static shapes. Later new tokens once generated are copied in to decoder_input_ids based on token_idx
             max_length = max_new_tokens + 1 if max_new_tokens is not None else self.generation_config.max_length
-            decoder_input_ids_start = (
-                torch.ones((batch_size, max_length), dtype=torch.long, device=device) * decoder_start_token_id
-            )
+
+            if isinstance(decoder_start_token_id, list):
+                if len(decoder_start_token_id) != batch_size:
+                    raise ValueError(
+                        f"`decoder_start_token_id` expected to have length {batch_size} but got {len(decoder_start_token_id)}"
+                    )
+                decoder_input_ids_start = torch.tensor(decoder_start_token_id, dtype=torch.long, device=device)
+                decoder_input_ids_start = decoder_input_ids_start.view(-1, 1)
+                decoder_input_ids_start = (
+                    torch.zeros((batch_size, max_length), dtype=torch.long, device=device) + decoder_input_ids_start
+                )
+            else:
+                decoder_input_ids_start = (
+                    torch.ones((batch_size, max_length), dtype=torch.long, device=device) * decoder_start_token_id
+                )
 
         # no user input -> use decoder_start_token_id as decoder_input_ids
         if decoder_input_ids is None:
